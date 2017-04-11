@@ -47,7 +47,6 @@
 
 #include <UC1701.h>
 
-
 // A custom glyph (a smiley)...
 static const byte glyph[] = { B00010000, B00110100, B00110000, B00110100, B00010000 };
 

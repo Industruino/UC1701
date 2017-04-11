@@ -28,7 +28,7 @@
 #else
 #include <Arduino.h>
 #endif
-#include <EEPROM.h>
+
 
 class UC1701: public Print {
     public:

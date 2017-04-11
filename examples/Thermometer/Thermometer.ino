@@ -62,10 +62,6 @@ void setup() {
   
   pinMode(ledPin, OUTPUT);
 
-  // The internal 1.1V reference provides for better
-  // resolution from the LM35, and is also more stable
-  // when powered from either a battery or USB...
-  analogReference(INTERNAL);
 }
 
 

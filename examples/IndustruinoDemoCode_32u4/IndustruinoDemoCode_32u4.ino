@@ -1,7 +1,7 @@
 /*
-* Industruino Demo Code - Default code loaded onto Industruino REV3
+* Industruino Demo Code - Default code loaded onto Industruino
 *
-* Copyright (c) 2013 Loic De Buck <contact.industruino@gmail.com>
+* Copyright (c) 2013 Loic De Buck <connect@industruino.com>
 *
 * Industruino is a DIN-rail mountable Arduino Leonardo compatible product
 * Please visit www.industruino.com for further information and code examples.
@@ -9,7 +9,9 @@
 * UC1701 compatible LCD; rst:D19 dc:D20 dn:D21 sclk:D22 (set pin configuration in UC1701 library header) 
 * 3-button membrane panel; analog pin A5
 */
-
+#include <Indio.h>
+#include <Wire.h>
+#include <EEPROM.h>
 
 #include <UC1701.h>
 //Download libary from https://github.com/Industruino/
@@ -64,6 +66,7 @@ unsigned long lastAdminActionTime = 0; //keeps track of last button activity
 // to the pins used:
 const int analogInPin = A5;  // Analog input pin that the button panel is attached to
 const int backlightPin = 13; // PWM output pin that the LED backlight is attached to
+
 const int D0 = 0;
 const int D1 = 1;
 const int D2 = 2;
@@ -82,6 +85,9 @@ const int D15 = 15;
 const int D16 = 16;
 const int D17 = 17;
 
+float anOutCh1 = 0;
+float anOutCh2 = 0;
+int anOutUpLimit = 0;
 
 int ButtonsAnalogValue = 0;        // value read from mebrane panel buttons.
 int backlightIntensity = 0;        // LCD backlight intesity
@@ -90,8 +96,14 @@ unsigned long lastLCDredraw = 0;   // keeps track of last time the screen was re
 
 void setup() {
   
+  Indio.analogWriteMode(1, mA);
+  Indio.analogWriteMode(2, mA);
+  Indio.analogWrite(1, 0, true);
+  Indio.analogWrite(2, 0, true);
+  
   SetInput(); //Sets all general pins to input
   backlightIntensity = EEPROM.read(0); //loads the backlight intensity from EEPROM
+  pinMode(analogInPin, INPUT);
   pinMode(backlightPin, OUTPUT); //set backlight pin to output 
   analogWrite(backlightPin, (map(backlightIntensity, 0, 5, 255, 0))); //convert backlight intesity from a value of 0-5 to a value of 0-255 for PWM.
 
@@ -109,7 +121,7 @@ for (int x=0; x <= 128; x++){
  Serial.begin(9600); //enables Serial port for debugging messages
 
 //Menu init  
- MenuSplash(); //load first menu
+ MenuWelcome(); //load first menu
 
 }
 
@@ -137,7 +149,8 @@ void loop() {
 //These functions only generate the content that is printed to the screen, please also edit the "Navigate" function further below to add actions to each menu.
 //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-void MenuSplash() { //this function draws the first menu - splash screen
+
+void MenuWelcome() { //this function draws the first menu - splash screen
 //menu inintialisers
   channel = 0; //starting row position of the cursor (top row) - controlled by the button panel counter
   channelUpLimit = 0; //upper row limit
@@ -147,13 +160,39 @@ void MenuSplash() { //this function draws the first menu - splash screen
   enterPressed = 0; //clears any possible accidental "Enter" presses that could have been caried over from the previous menu
   lcd.clear(); //clear the screen
 //actual user content on the screen
+  lcd.setCursor(5, 1); //set the cursor to the fifth pixel from the left edge, third row.
+  lcd.print("Welcome to"); //print text on screen
   lcd.setCursor(5, 2); //set the cursor to the fifth pixel from the left edge, third row.
-  lcd.print("Industruino"); //print text on screen
+  lcd.print("Industruino!"); //print text on screen
+  delay(2000);
 }
+
+
+void MenuSelect() { //second menu - choice of submenu's
+//menu inintialisers
+  channel = 3; //starting row position of the cursor (top row) - controlled by the button panel counter
+  channelLowLimit = 3;
+  channelUpLimit = 4; //upper row limit
+  MenuLevel = 1; //menu tree depth -> second level
+  MenuID = 1; //unique menu id -> has to be unique for each menu on the same menu level.
+  enterPressed = 0; //clears any possible accidental "Enter" presses that could have been caried over from the previous menu
+  lcd.clear(); //clear the screen
+  ScrollCursor(); //enable the moving cursor (note that this function is not called in the splash screen, thus disabling the cursor)
+//actual user content on the screen
+  lcd.setCursor(6, 0); //set the cursor to the sixth pixel from the left edge, first row.
+  lcd.print("Please select"); //print text on screen
+  lcd.setCursor(6, 1); //set the cursor to the sixth pixel from the left edge, first row.
+  lcd.print("Baseboard type:"); //print text on screen
+  lcd.setCursor(6, 3); //set the cursor to the sixth pixel from the left edge, second row.
+  lcd.print("IND.I/O"); //print text on screen
+  lcd.setCursor(6, 4); //set the cursor to the sixth pixel from the left edge, third row.
+  lcd.print("PROTO"); //print text on screen
+}
+
 
 void MenuMain() { //second menu - choice of submenu's
 //menu inintialisers
-  channel = 0; //starting row position of the cursor (top row) - controlled by the button panel counter
+  channel = 1; //starting row position of the cursor (top row) - controlled by the button panel counter
   channelUpLimit = 2; //upper row limit
   MenuLevel = 1; //menu tree depth -> second level
   MenuID = 1; //unique menu id -> has to be unique for each menu on the same menu level.
@@ -173,8 +212,8 @@ void MenuSetup() { //submenu of Main menu - setup screen for Industruino
  channel = 0;
   channelUpLimit = 2;
   channelLowLimit = 0;
-  MenuID = 2;
-  MenuLevel = 2;
+  MenuID = 9;
+  MenuLevel = 3;
   enterPressed = 0;
   lcd.clear();
   ScrollCursor();
@@ -210,7 +249,7 @@ void MenuParametersReset() {
   
 }
 
-void MenuDemo() {
+void MenuDemoProto() {
   channel = 0;
   channelUpLimit = 3;
   channelLowLimit = 0;
@@ -229,9 +268,31 @@ void MenuDemo() {
   lcd.print("Back");
 }
 
-
-
 void MenuDigitalOut1() {
+  SetOutput();
+  channel = 0;
+  channelUpLimit = 6;
+  channelLowLimit = 0;
+  MenuID = 1;
+  MenuLevel = 3;
+  enterPressed = 0;
+  lcd.clear();
+  ScrollCursor();
+  lcd.setCursor(6, 0);
+  lcd.print("D0");
+  lcd.setCursor(6, 1);
+  lcd.print("D1");
+  lcd.setCursor(6, 2);
+  lcd.print("D2");
+  lcd.setCursor(6, 3);
+  lcd.print("D3");
+  lcd.setCursor(6, 4);
+  lcd.print("D4");
+  lcd.setCursor(6, 5);
+  lcd.print("D5");
+}
+
+void MenuDigitalOut1Indio() {
   SetOutput();
   channel = 0;
   channelUpLimit = 6;
@@ -431,9 +492,9 @@ void AnalogOut1() {
 
 void MenuAnalogIn1() {
   SetInput();
-  channel = 0;
-  channelUpLimit = 1;
-  channelLowLimit = 0;
+  channel = 5;
+  channelUpLimit = 5;
+  channelLowLimit = 5;
   MenuID = 7;
   MenuLevel = 3;
   enterPressed = 0;
@@ -464,35 +525,277 @@ void MenuAnalogIn1Live() {
   lcd.setCursor(30, 4);
   lcd.print(analogRead(9));
   lcd.setCursor(6, 5);
-  lcd.print("A10          ");
-  lcd.setCursor(30, 5);
-  lcd.print(analogRead(10));
+  lcd.print("Back   ");
 }
 
+//---------------------------------------------------------------------------------------------------------------------------------------------
+//---------------------------------------------------------------------------------------------------------------------------------------------
 
-void MenuAnalogIn2() {
-  SetInput();
-  channel = 1;
-  channelUpLimit = 1;
+  
+  
+  
+ void MenuDemoInd() {
+  channel = 0;
+  channelUpLimit = 7;
   channelLowLimit = 0;
-  MenuID = 8;
+  MenuID = 11;
+  MenuLevel = 2;
+  enterPressed = 0;
+  lcd.clear();
+  ScrollCursor();
+  lcd.setCursor(6, 0);
+  lcd.print("Digital Input");
+  lcd.setCursor(6, 1);
+  lcd.print("Digital Output");
+  lcd.setCursor(6, 2);
+  lcd.print("Analog Input  0-10V");
+  lcd.setCursor(6, 3);
+  lcd.print("Analog Input  0-20mA");
+  lcd.setCursor(6, 4);
+  lcd.print("Analog Output 0-10V");
+  lcd.setCursor(6, 5);
+  lcd.print("Analog Output 0-20mA");
+  lcd.setCursor(6, 6);
+  lcd.print("LCD backlight");
+  lcd.setCursor(6, 7);
+  lcd.print("Back");
+}
+
+void MenuDigitalOutInd() {
+  
+  for (int i=1; i <= 8; i++){
+  Indio.digitalMode(i, OUTPUT);
+  Indio.digitalWrite(i, LOW);
+  }
+  channel = 0;
+  channelUpLimit = 8;
+  channelLowLimit = 0;
+  MenuID = 12;
   MenuLevel = 3;
   enterPressed = 0;
   lcd.clear();
   ScrollCursor();
-  MenuAnalogIn2Live();
+  lcd.setCursor(6, 0);
+  lcd.print("CH1");
+  lcd.setCursor(6, 1);
+  lcd.print("CH2");
+  lcd.setCursor(6, 2);
+  lcd.print("CH3");
+  lcd.setCursor(6, 3);
+  lcd.print("CH4");
+  lcd.setCursor(6, 4);
+  lcd.print("CH5");
+  lcd.setCursor(6, 5);
+  lcd.print("CH6");
+  lcd.setCursor(6, 6);
+  lcd.print("CH7");
+  lcd.setCursor(6, 7);
+  lcd.print("CH8");
 }
 
-void MenuAnalogIn2Live() {
+
+void MenuDigitalInInd() {
+  
+  for (int i=1; i <= 8; i++){
+  Indio.digitalMode(i, INPUT);
+  Indio.digitalWrite(i, LOW);
+  }
+  
+  channel = 0;
+  channelUpLimit = 1;
+  channelLowLimit = 0;
+  MenuID = 14;
+  MenuLevel = 3;
+  enterPressed = 0;
+  lcd.clear();
+  ScrollCursor();
+  MenuDigitalIn1Live();
+}
+
+void MenuDigitalInLiveInd() {
   lcd.setCursor(6, 0);
-  lcd.print("A11          ");
-  lcd.setCursor(30, 0);
-  lcd.print(analogRead(11));
+  lcd.print("CH1  ");
+  lcd.print(Indio.digitalRead(1));
   lcd.setCursor(6, 1);
+  lcd.print("CH2  ");
+  lcd.print(Indio.digitalRead(2));
+  lcd.setCursor(6, 2);
+  lcd.print("CH3  ");
+  lcd.print(Indio.digitalRead(3));
+  lcd.setCursor(6, 3);
+  lcd.print("CH4  ");
+  lcd.print(Indio.digitalRead(4));
+  lcd.setCursor(6, 4);
+  lcd.print("CH5  ");
+  lcd.print(Indio.digitalRead(5));
+  lcd.setCursor(6, 5);
+  lcd.print("CH6  ");
+  lcd.print(Indio.digitalRead(6));
+  lcd.setCursor(6, 6);
+  lcd.print("CH7  ");
+  lcd.print(Indio.digitalRead(7));
+  lcd.setCursor(6, 7);
+  lcd.print("CH8  ");
+  lcd.print(Indio.digitalRead(8));
+}
+
+
+void MenuAnalogOut20mAInd() {
+  anOutUpLimit = 20.5;
+  anOutCh1 = 0;
+  anOutCh2 = 0;
+  Indio.analogWriteMode(1, mA);
+  Indio.analogWriteMode(2, mA);
+  Indio.analogWrite(1, anOutCh1, false);
+  Indio.analogWrite(2, anOutCh2, false);
+  channel = 0;
+  channelUpLimit = 2;
+  channelLowLimit = 0;
+  MenuID = 16;
+  MenuLevel = 3;
+  enterPressed = 0;
+  lcd.clear();
+  ScrollCursor();
+  lcd.setCursor(6, 0);
+  lcd.print("CH1");
+  lcd.setCursor(35, 0);
+  lcd.print(anOutCh1);
+  lcd.setCursor(70, 0);
+  lcd.print("mA");
+  lcd.setCursor(6, 1);
+  lcd.print("CH2");
+  lcd.setCursor(35, 1);
+  lcd.print(anOutCh2);
+  lcd.setCursor(70, 1);
+  lcd.print("mA");
+  lcd.setCursor(6, 2);
+  lcd.print("Back");
+}
+
+void MenuAnalogOut10VInd() {
+  anOutUpLimit = 10.5;
+  anOutCh1 = 0;
+  anOutCh2 = 0;
+  Indio.analogWriteMode(1, V10);
+  Indio.analogWriteMode(2, V10);
+  Indio.analogWrite(1, anOutCh1, false);
+  Indio.analogWrite(2, anOutCh2, false);
+  channel = 0;
+  channelUpLimit = 2;
+  channelLowLimit = 0;
+  MenuID = 17;
+  MenuLevel = 3;
+  enterPressed = 0;
+  lcd.clear();
+  ScrollCursor();
+  lcd.setCursor(6, 0);
+  lcd.print("CH1");
+  lcd.setCursor(35, 0);
+  lcd.print(anOutCh1, 2);
+  lcd.setCursor(70, 0);
+  lcd.print("V");
+  lcd.setCursor(6, 1);
+  lcd.print("CH2");
+  lcd.setCursor(35, 1);
+  lcd.print(anOutCh2, 1);
+  lcd.setCursor(70, 1);
+  lcd.print("V");
+  lcd.setCursor(6, 2);
+  lcd.print("Back");
+}
+
+
+void MenuAnalogIn20mAInd() {
+  Indio.setADCResolution(14);
+  Indio.analogReadMode(1, mA);
+  Indio.analogReadMode(2, mA);
+  Indio.analogReadMode(3, mA);
+  Indio.analogReadMode(4, mA);
+  channel = 4;
+  channelUpLimit = 4;
+  channelLowLimit = 4;
+  MenuID = 18;
+  MenuLevel = 3;
+  enterPressed = 0;
+  lcd.clear();
+  ScrollCursor();
+  MenuAnalogIn20mALiveInd();
+}
+
+void MenuAnalogIn20mALiveInd() {
+  lcd.setCursor(6, 0);
+  lcd.print("CH1           ");
+  lcd.setCursor(35, 0);
+  lcd.print(Indio.analogRead(1));
+  lcd.setCursor(67, 0);
+  lcd.print("mA");
+  lcd.setCursor(6, 1);
+  lcd.print("CH2           ");
+  lcd.setCursor(35, 1);
+  lcd.print(Indio.analogRead(2));
+  lcd.setCursor(67, 1);
+  lcd.print("mA");
+  lcd.setCursor(6, 2);
+  lcd.print("CH3           ");
+  lcd.setCursor(35, 2);
+  lcd.print(Indio.analogRead(3));
+  lcd.setCursor(67, 2);
+  lcd.print("mA");
+  lcd.setCursor(6, 3);
+  lcd.print("CH4           ");
+  lcd.setCursor(35, 3);
+  lcd.print(Indio.analogRead(4));
+  lcd.setCursor(67, 3);
+  lcd.print("mA");
+  lcd.setCursor(6, 4);
   lcd.print("Back   ");
 }
 
+void MenuAnalogIn10VInd() {
+  Indio.setADCResolution(14);
+  Indio.analogReadMode(1, V10);
+  Indio.analogReadMode(2, V10);
+  Indio.analogReadMode(3, V10);
+  Indio.analogReadMode(4, V10);
+  channel = 4;
+  channelUpLimit = 4;
+  channelLowLimit = 4;
+  MenuID = 19;
+  MenuLevel = 3;
+  enterPressed = 0;
+  lcd.clear();
+  ScrollCursor();
+  MenuAnalogIn10VLiveInd();
+}
 
+void MenuAnalogIn10VLiveInd() {
+  lcd.setCursor(6, 0);
+  lcd.print("CH1           ");
+  lcd.setCursor(35, 0);
+  lcd.print(Indio.analogRead(1));
+  lcd.setCursor(67, 0);
+  lcd.print("V");
+  lcd.setCursor(6, 1);
+  lcd.print("CH2           ");
+  lcd.setCursor(35, 1);
+  lcd.print(Indio.analogRead(2));
+  lcd.setCursor(67, 1);
+  lcd.print("V");
+  lcd.setCursor(6, 2);
+  lcd.print("CH3           ");
+  lcd.setCursor(35, 2);
+  lcd.print(Indio.analogRead(3));
+  lcd.setCursor(67, 2);
+  lcd.print("V");
+  lcd.setCursor(6, 3);
+  lcd.print("CH4           ");
+  lcd.setCursor(35, 3);
+  lcd.print(Indio.analogRead(4));
+  lcd.setCursor(67, 3);
+  lcd.print("V");
+  lcd.setCursor(6, 4);
+  lcd.print("Back   ");
+}
 
 //---------------------------------------------------------------------------------------------------------------------------------------------------
 //UI control logic, please edit this function to reflect the specific menus that your created above and your desired actions for each cursor position
@@ -508,43 +811,59 @@ if (valueEditing != 1){
   if (MenuLevel == 0) //check if current activated menu is the 'splash screen' (first level)
   {
       {
-      if (enterPressed == 1) MenuMain(); //if enter is pressed load the 'Main menu'
+      if (enterPressed == 1) MenuSelect(); //if enter is pressed load the 'Main menu'
       }
   }
   
    if (MenuLevel == 1){ //check if current activated menu is the 'Main menu' (first level)
     
-    if (channel == 0 && enterPressed == 1) MenuSetup(); //if cursor is on the first row and enter is pressed load the 'Setup' menu
-    if (channel == 1 && enterPressed == 1) MenuDemo(); //if cursor is on the second row and enter is pressed load the 'Demo' menu
-    if (channel == 2 && enterPressed == 1) MenuSplash(); //if cursor is on the third row and enter is pressed load the 'splash screen'
+    if (channel == 3 && enterPressed == 1) MenuDemoInd(); //if cursor is on the first row and enter is pressed load the 'Setup' menu
+    if (channel == 4 && enterPressed == 1) MenuDemoProto(); //if cursor is on the second row and enter is pressed load the 'Demo' menu
+    if (channel == 2 && enterPressed == 1) MenuWelcome(); //if cursor is on the third row and enter is pressed load the 'splash screen'
      }
   
     
     
     if (MenuLevel == 2){
       
-      if (MenuID == 2){
-        if (channel == 0 && enterPressed == 1) //using 'value editing mode' to edit a variable using the UI
-       {
-        TargetValue = backlightIntensity; //copy variable to be edited to 'Target value'
-        backlightIntensity = EditValue(); 
-        analogWrite(backlightPin, (map(backlightIntensity, 0, 5, 255, 0)));
-        EEPROM.write(0, backlightIntensity);
+      
+      
         
-       }
-        if (channel == 1 && enterPressed == 1) MenuParametersReset();
-        if (channel == 2 && enterPressed == 1) MenuDemo();   
-        }   
       if (MenuID == 3){
         if (channel == 0 && enterPressed == 1) MenuDigitalOut1(); 
         if (channel == 1 && enterPressed == 1) MenuDigitalIn1(); 
         if (channel == 2 && enterPressed == 1) MenuAnalogIn1(); 
-        if (channel == 3 && enterPressed == 1) MenuMain(); 
+        if (channel == 3 && enterPressed == 1) MenuSelect(); 
         }
-       }
+       
+       
+       if (MenuID == 11){
+        if (channel == 0 && enterPressed == 1) MenuDigitalInInd(); 
+        if (channel == 1 && enterPressed == 1) MenuDigitalOutInd(); 
+        if (channel == 2 && enterPressed == 1) MenuAnalogIn10VInd(); 
+        if (channel == 3 && enterPressed == 1) MenuAnalogIn20mAInd();
+        if (channel == 4 && enterPressed == 1) MenuAnalogOut10VInd(); 
+        if (channel == 5 && enterPressed == 1) MenuAnalogOut20mAInd(); 
+        if (channel == 6 && enterPressed == 1) MenuSetup(); //if cursor is on the first row and enter is pressed load the 'Setup' menu
+        if (channel == 7 && enterPressed == 1) MenuSelect(); 
+        }
+    }
      
     if (MenuLevel == 3){
       if (MenuID == 1){
+        
+        if ( buttonEnterState == LOW ) 
+          {
+          lcd.setCursor(0, channel);
+          lcd.print("*");
+          }
+          
+        if ( buttonEnterState == HIGH ) 
+          {
+          lcd.setCursor(0, channel);
+          lcd.print(">");
+          }
+        
         if (channel == 0 && buttonEnterState == HIGH) digitalWrite(D0, HIGH); 
         if (channel == 0 && buttonEnterState == LOW) digitalWrite(D0, LOW); 
         if (channel == 1 && buttonEnterState == HIGH) digitalWrite(D1, HIGH); 
@@ -559,7 +878,55 @@ if (valueEditing != 1){
         if (channel == 5 && buttonEnterState == LOW) digitalWrite(D5, LOW);
         if (channel == 6) MenuDigitalOut2();
         } 
+        
+        if (MenuID == 12){
+        
+          if ( buttonEnterState == LOW ) 
+          {
+          lcd.setCursor(0, channel);
+          lcd.print("*");
+          }
+          
+        if ( buttonEnterState == HIGH ) 
+          {
+          lcd.setCursor(0, channel);
+          lcd.print(">");
+          }
+          
+          
+        if (channel == 0 && buttonEnterState == LOW) Indio.digitalWrite(1, HIGH); 
+        if (channel == 0 && buttonEnterState == HIGH) Indio.digitalWrite(1, LOW); 
+        if (channel == 1 && buttonEnterState == LOW) Indio.digitalWrite(2, HIGH); 
+        if (channel == 1 && buttonEnterState == HIGH) Indio.digitalWrite(2, LOW); 
+        if (channel == 2 && buttonEnterState == LOW) Indio.digitalWrite(3, HIGH); 
+        if (channel == 2 && buttonEnterState == HIGH) Indio.digitalWrite(3, LOW); 
+        if (channel == 3 && buttonEnterState == LOW) Indio.digitalWrite(4, HIGH); 
+        if (channel == 3 && buttonEnterState == HIGH) Indio.digitalWrite(4, LOW);
+        if (channel == 4 && buttonEnterState == LOW) Indio.digitalWrite(5, HIGH); 
+        if (channel == 4 && buttonEnterState == HIGH) Indio.digitalWrite(5, LOW);
+        if (channel == 5 && buttonEnterState == LOW) Indio.digitalWrite(6, HIGH); 
+        if (channel == 5 && buttonEnterState == HIGH) Indio.digitalWrite(6, LOW);
+        if (channel == 6 && buttonEnterState == LOW) Indio.digitalWrite(7, HIGH); 
+        if (channel == 6 && buttonEnterState == HIGH) Indio.digitalWrite(7, LOW);
+        if (channel == 7 && buttonEnterState == LOW) Indio.digitalWrite(8, HIGH); 
+        if (channel == 7 && buttonEnterState == HIGH) Indio.digitalWrite(8, LOW);
+        if (channel == 8) MenuDemoInd();
+        } 
+        
       if (MenuID == 2){
+        
+        if ( buttonEnterState == LOW ) 
+          {
+          lcd.setCursor(0, channel);
+          lcd.print("*");
+          }
+          
+        if ( buttonEnterState == HIGH ) 
+          {
+          lcd.setCursor(0, channel);
+          lcd.print(">");
+          }
+        
         if (channel == 0 && buttonEnterState == HIGH) digitalWrite(D6, HIGH); 
         if (channel == 0 && buttonEnterState == LOW) digitalWrite(D6, LOW); 
         if (channel == 1 && buttonEnterState == HIGH) digitalWrite(D7, HIGH); 
@@ -576,6 +943,20 @@ if (valueEditing != 1){
         if (channel == -1) MenuDigitalOut1();
         }
       if (MenuID == 3){
+        
+        if ( buttonEnterState == LOW ) 
+          {
+          lcd.setCursor(0, channel);
+          lcd.print("*");
+          }
+          
+        if ( buttonEnterState == HIGH ) 
+          {
+          lcd.setCursor(0, channel);
+          lcd.print(">");
+          }
+        
+        
         if (channel == 0 && buttonEnterState == HIGH) digitalWrite(D12, HIGH); 
         if (channel == 0 && buttonEnterState == LOW) digitalWrite(D12, LOW);
         if (channel == 1 && buttonEnterState == HIGH) digitalWrite(D14, HIGH); 
@@ -586,7 +967,7 @@ if (valueEditing != 1){
         if (channel == 3 && buttonEnterState == LOW) digitalWrite(D16, LOW); 
         if (channel == 4 && buttonEnterState == HIGH) digitalWrite(D17, HIGH); 
         if (channel == 4 && buttonEnterState == LOW) digitalWrite(D17, LOW);
-        if (channel == 5 && enterPressed == 1) MenuDemo(); 
+        if (channel == 5 && enterPressed == 1) MenuDemoProto(); 
         if (channel == -1) MenuDigitalOut2();
         }
       if (MenuID == 4){
@@ -596,6 +977,15 @@ if (valueEditing != 1){
         }
         if (channel == 1) MenuDigitalIn2();
         }
+        
+        if (MenuID == 14){
+        if ((millis()-lastLCDredraw) > 300){
+        MenuDigitalInLiveInd();
+        lastLCDredraw = millis();
+        } 
+        if (channel == 1) MenuDemoInd();
+        }
+        
       if (MenuID == 5){
         if ((millis()-lastLCDredraw) > 300){
         MenuDigitalIn2Live();
@@ -610,29 +1000,102 @@ if (valueEditing != 1){
         lastLCDredraw = millis();
         }
         if (channel == 4) MenuDigitalIn2();
-        if (channel == 5 && enterPressed == 1) MenuDemo(); 
+        if (channel == 5 && enterPressed == 1) MenuDemoProto(); 
         }    
       if (MenuID == 7){
         if ((millis()-lastLCDredraw) > 300){
         MenuAnalogIn1Live();
         lastLCDredraw = millis();
         }
-        if (channel == 1) MenuAnalogIn2();
+        if (channel == 5 && enterPressed == 1) MenuDemoProto();
         }   
-      if (MenuID == 8){
-        if ((millis()-lastLCDredraw) > 300){
-        MenuAnalogIn2Live();
+
+        
+        
+        if (MenuID == 18){
+        if ((millis()-lastLCDredraw) > 268){
+        MenuAnalogIn20mALiveInd();
         lastLCDredraw = millis();
         }
-        if (channel == 0) MenuAnalogIn1();
-        if (channel == 1 && enterPressed == 1) MenuDemo(); 
+        if (channel == 4 && enterPressed == 1) MenuDemoInd(); 
+        }   
+        
+         if (MenuID == 19){
+        if ((millis()-lastLCDredraw) > 268){
+        MenuAnalogIn10VLiveInd();
+        lastLCDredraw = millis();
+        }
+        if (channel == 4 && enterPressed == 1) MenuDemoInd(); 
         }   
         
         
-      if (MenuID == 10){
-        if (channel == 4 && enterPressed == 1) ResetParameters();
-        if (channel == 5 && enterPressed == 1) MenuSetup(); 
+      
+        
+        if (MenuID == 9){
+        if (channel == 0 && enterPressed == 1) //using 'value editing mode' to edit a variable using the UI
+       {
+        TargetValue = backlightIntensity; //copy variable to be edited to 'Target value'
+        backlightIntensity = EditValue(); 
+        analogWrite(backlightPin, (map(backlightIntensity, 0, 5, 255, 0)));
+        EEPROM.write(0, backlightIntensity);
+        
+       }
+        if (channel == 1 && enterPressed == 1) MenuParametersReset();
+        if (channel == 2 && enterPressed == 1) MenuDemoInd();   
         } 
+        
+        if (MenuID == 10){
+        if (channel == 4 && enterPressed == 1) ResetParameters();
+        if (channel == 5 && enterPressed == 1) MenuDemoInd(); 
+        } 
+        
+        
+        if (MenuID == 16){
+        if (channel == 0 && enterPressed == 1) //using 'value editing mode' to edit a variable using the UI
+       {
+        TargetValue = anOutCh1; //copy variable to be edited to 'Target value'
+        anOutCh1 = EditFloatValue();  
+        Indio.analogWrite(1, anOutCh1, false);      
+       }
+        if (channel == 1 && enterPressed == 1) //using 'value editing mode' to edit a variable using the UI
+       {
+        TargetValue = anOutCh2; //copy variable to be edited to 'Target value'
+        anOutCh2 = EditFloatValue(); 
+        Indio.analogWrite(2, anOutCh2, false);       
+       }
+        if (channel == 2 && enterPressed == 1) {
+          Indio.analogWriteMode(1, mA);
+          Indio.analogWriteMode(2, mA);
+          Indio.analogWrite(1, 0, false);
+          Indio.analogWrite(2, 0, false);
+          MenuDemoInd(); 
+          }  
+        } 
+        
+        
+       if (MenuID == 17){
+        if (channel == 0 && enterPressed == 1) //using 'value editing mode' to edit a variable using the UI
+       {
+        TargetValue = anOutCh1; //copy variable to be edited to 'Target value'
+        anOutCh1 = EditFloatValue();
+        Indio.analogWrite(1, anOutCh1, false);       
+       }
+       if (channel == 1 && enterPressed == 1) //using 'value editing mode' to edit a variable using the UI
+       {
+        TargetValue = anOutCh2; //copy variable to be edited to 'Target value'
+        anOutCh2 = EditFloatValue();  
+        Indio.analogWrite(2, anOutCh2, false);     
+       }
+        if (channel == 2 && enterPressed == 1) {
+          Indio.analogWriteMode(1, mA);
+          Indio.analogWriteMode(2, mA);
+          Indio.analogWrite(1, 0, false);
+          Indio.analogWrite(2, 0, false);
+          MenuDemoInd();
+          } 
+        } 
+        
+        
     
        }
        
@@ -658,6 +1121,8 @@ if (valueEditing != 1){
   enterPressed = 0; //clears any possible accidental "Enter" presses that could have been caried over
   while (enterPressed != 1){ //stays in 'value editing mode' until enter is pressed
   ReadButtons(); //check the buttons for any change
+  lcd.setCursor(0, row);
+  lcd.print("*");
   if (channel != lastChannel){ //when up or down button is pressed
        if (channel < lastChannel && TargetValue <=4){ //if 'Up' button is pressed, and is within constraint range.
          TargetValue+= valueEditingInc; //increment target variable with pre-defined increment value
@@ -676,7 +1141,7 @@ if (valueEditing != 1){
        lcd.print(TargetValue, 0);
        lastChannel = channel;
        }  
-  delay(50);
+  //delay(50);
   }  
   channel = row; //load back the previous row position to the button counter so that the cursor stays in the same position as it was left before switching to 'value editing mode'
   constrainEnc = 1; //enable constrainment of button counter's range so to stay within the menu's range
@@ -686,16 +1151,56 @@ if (valueEditing != 1){
   return TargetValue; //return the edited value to the main 'Navigate' UI control function for further processing
 }
   
+float EditFloatValue() //a function to edit a variable using the UI - function is called by the main 'Navigate' UI control function and is loaded with a variable to be edited
+{
+  row = channel; //save the current cursor position so that after using the buttons for 'value editing mode' the cursor position can be reinstated.
+  channel = 0; //reset the button counter so to avoid carrying over a value from the cursor.
+  constrainEnc = 0; //disable constrainment of button counter's range
+  valueEditingInc = 0.5; //increment for each button press
+  valueEditing = 1; //flag to indicate that we are going into 'value editing mode'.
+  enterPressed = 0; //clears any possible accidental "Enter" presses that could have been caried over
+  while (enterPressed != 1){ //stays in 'value editing mode' until enter is pressed
+  ReadButtons(); //check the buttons for any change
+  lcd.setCursor(0, row);
+  lcd.print("*");
+  if (channel != lastChannel){ //when up or down button is pressed
+       if (channel < lastChannel && TargetValue <= anOutUpLimit){ //if 'Up' button is pressed, and is within constraint range.
+         TargetValue+= valueEditingInc; //increment target variable with pre-defined increment value
+       }
+       if (channel > lastChannel && TargetValue > 0){ //if 'Down' button is pressed, and is within constraint range.
+         TargetValue-= valueEditingInc ; //decrement target variable with pre-defined increment value
+       }
+      //clear a section of a row to make space for updated value
+      for (int i=35; i <= 50; i++){ 
+      lcd.setCursor(i, row);
+      lcd.print("   ");
+       }
+       //print updated value
+       lcd.setCursor(35, row);
+       Serial.println(TargetValue);
+       lcd.print(TargetValue, 2);
+       lastChannel = channel;
+       }  
+  //delay(50);
+  }  
+  channel = row; //load back the previous row position to the button counter so that the cursor stays in the same position as it was left before switching to 'value editing mode'
+  constrainEnc = 1; //enable constrainment of button counter's range so to stay within the menu's range
+  channelUpLimit = 2; //upper row limit
+  valueEditing = 0; //flag to indicate that we are leaving 'value editing mode'
+  enterPressed = 0; //clears any possible accidental "Enter" presses that could have been caried over
+  return TargetValue; //return the edited value to the main 'Navigate' UI control function for further processing
+}  
+  
   
 //--------------------------------------------------------------------------------------------------------------------------------------------- 
 // Peripheral functions
 //--------------------------------------------------------------------------------------------------------------------------------------------- 
 
-void ReadButtons(){ //reads the 3 buttons from a single analoge pin, filters and decides which button was pressed
+ void ReadButtons(){ //reads the 3 buttons from a single analoge pin, filters and decides which button was pressed
   
   ButtonsAnalogValue = analogRead(analogInPin);  
  
-   if (ButtonsAnalogValue>400 && ButtonsAnalogValue< 700 )
+   if (ButtonsAnalogValue>480 && ButtonsAnalogValue< 520 )
   {
   buttonEnterState = HIGH;
   }
@@ -704,7 +1209,7 @@ void ReadButtons(){ //reads the 3 buttons from a single analoge pin, filters and
   buttonEnterState = LOW;
   }
   
-    if (ButtonsAnalogValue>100 && ButtonsAnalogValue<400)
+    if (ButtonsAnalogValue>220 && ButtonsAnalogValue<270)
   {
    buttonUpState = HIGH;
   }
@@ -714,7 +1219,7 @@ void ReadButtons(){ //reads the 3 buttons from a single analoge pin, filters and
   }
    
    
-    if (ButtonsAnalogValue>700 && ButtonsAnalogValue<1000 )
+    if (ButtonsAnalogValue>750 && ButtonsAnalogValue<780 )
   {
   buttonDownState = HIGH;
   }
@@ -770,45 +1275,24 @@ void ReadButtons(){ //reads the 3 buttons from a single analoge pin, filters and
       
  }
  
- 
  void SetOutput(){  // a simple function called to set a group of pins as outputs
-  pinMode(D0, OUTPUT);
-  pinMode(D1, OUTPUT); 
-  pinMode(D2, OUTPUT);
-  pinMode(D3, OUTPUT);
-  pinMode(D4, OUTPUT);
-  pinMode(D5, OUTPUT); 
-  pinMode(D6, OUTPUT); 
-  pinMode(D7, OUTPUT);
-  pinMode(D8, OUTPUT);   
-  pinMode(D9, OUTPUT); 
-  pinMode(D10, OUTPUT);
-  pinMode(D11, OUTPUT);
-  pinMode(D12, OUTPUT);
-  pinMode(D14, OUTPUT); 
-  pinMode(D15, OUTPUT);  
-  pinMode(D16, OUTPUT);
-  pinMode(D17, OUTPUT); 
+
+ for (int i=0; i <= 16; i++){
+       pinMode(i, OUTPUT);
+   } 
+
  }
  
 void SetInput(){  // a simple function called to set a group of pins as inputs
-  pinMode(D0, INPUT);
-  pinMode(D1, INPUT);
-  pinMode(D2, INPUT);  
-  pinMode(D3, INPUT);
-  pinMode(D4, INPUT);
-  pinMode(D5, INPUT); 
-  pinMode(D6, INPUT); 
-  pinMode(D7, INPUT);
-  pinMode(D8, INPUT);  
-  pinMode(D9, INPUT); 
-  pinMode(D10, INPUT);
-  pinMode(D11, INPUT);
-  pinMode(D12, INPUT);
-  pinMode(D14, INPUT); 
-  pinMode(D15, INPUT);  
-  pinMode(D16, INPUT);
-  pinMode(D17, INPUT); 
+
+  for (int i=0; i <= 12; i++){
+       pinMode(i, INPUT);
+   } 
+
+   for (int i=14; i <= 16; i++){
+       pinMode(i, INPUT);
+   } 
+   
  }
  
  void ResetParameters(){ //resets the setup parameters of Industruino and saves the settings to EEPROM
@@ -838,4 +1322,7 @@ void ScrollCursor() //makes the cursor move
   lcd.print(">"); //draw cursor
  
   }
+  
+  
+  
 

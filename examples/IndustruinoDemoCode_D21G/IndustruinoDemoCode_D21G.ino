@@ -11,7 +11,7 @@
 */
 #include <Indio.h>  
 #include <Wire.h>
-#include <EEPROM.h>
+
 
 #include <UC1701.h>
 //Download libary from https://github.com/Industruino/
@@ -92,8 +92,8 @@ float anOutCh2 = 0;
 int anOutUpLimit = 0;
 
 int ButtonsAnalogValue = 0;        // value read from mebrane panel buttons.
-int backlightIntensity = 0;        // LCD backlight intesity
-int backlightIntensityDef = 0;     // Default LCD backlight intesity
+int backlightIntensity = 5;        // LCD backlight intesity
+int backlightIntensityDef = 5;     // Default LCD backlight intesity
 unsigned long lastLCDredraw = 0;   // keeps track of last time the screen was redrawn
 
 void setup() {
@@ -102,13 +102,13 @@ void setup() {
   Indio.analogWriteMode(2, mA);
   Indio.analogWrite(1, 0, true);
   Indio.analogWrite(2, 0, true);
+
   SetInput(); //Sets all general pins to input
-  backlightIntensity = EEPROM.read(0); //loads the backlight intensity from EEPROM
   pinMode(buttonEnterPin, INPUT);
   pinMode(buttonUpPin, INPUT);
   pinMode(buttonDownPin, INPUT);
   pinMode(backlightPin, OUTPUT); //set backlight pin to output
-  analogWrite(backlightPin, (map(backlightIntensity, 0, 5, 255, 0))); //convert backlight intesity from a value of 0-5 to a value of 0-255 for PWM.
+  analogWrite(backlightPin, (map(backlightIntensity, 5, 1, 255, 0))); //convert backlight intesity from a value of 0-5 to a value of 0-255 for PWM.
   //LCD init
   lcd.begin();  //sets the resolution of the LCD screen
 
@@ -1038,8 +1038,8 @@ void Navigate()
         {
           TargetValue = backlightIntensity; //copy variable to be edited to 'Target value'
           backlightIntensity = EditValue();
-          analogWrite(backlightPin, (map(backlightIntensity, 0, 5, 255, 0)));
-          EEPROM.write(0, backlightIntensity);
+          analogWrite(backlightPin, (map(backlightIntensity, 5, 0, 255, 0)));
+
         }
         if (channel == 1 && enterPressed == 1) MenuParametersReset();
         if (channel == 2 && enterPressed == 1) MenuDemoInd();
@@ -1291,8 +1291,7 @@ void SetInput() { // a simple function called to set a group of pins as inputs
 void ResetParameters() { //resets the setup parameters of Industruino and saves the settings to EEPROM
 
   backlightIntensity = backlightIntensityDef; //load the default backlight intensity value
-  analogWrite(backlightPin, (map(backlightIntensity, 0, 5, 255, 0))); //map the value (from 0-5) to a corresponding PWM value (0-255) and update the output
-  EEPROM.write(0, backlightIntensity); //save the current backlight intensity to EEPROM
+  analogWrite(backlightPin, (map(backlightIntensity, 5, 0, 255, 0))); //map the value (from 0-5) to a corresponding PWM value (0-255) and update the output
   MenuSetup(); //return to the setup menu
 }
 
