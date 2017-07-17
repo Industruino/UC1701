@@ -140,6 +140,22 @@ size_t UC1701::write(uint8_t chr)
 #endif
     }
 
+    if (chr == '\r') {
+        this->setCursor(0, this->line);
+#if ARDUINO < 100
+        return;
+#else
+        return 1;
+#endif
+    } else if (chr == '\n') {
+        this->setCursor(this->column, this->line + 1);
+#if ARDUINO < 100
+        return;
+#else
+        return 1;
+#endif
+    }
+
     const unsigned char *glyph;
     unsigned char pgm_buffer[5];
 
