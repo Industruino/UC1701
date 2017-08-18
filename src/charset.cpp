@@ -21,13 +21,10 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-
-
-#include <avr/pgmspace.h>
-
+#include <Arduino.h>
 
 // The 7-bit ASCII character set...
-const PROGMEM unsigned char charset[][5] = {
+const uint8_t charset[][5] = {
   { 0x00, 0x00, 0x00, 0x00, 0x00 },  // 20 space
   { 0x00, 0x00, 0x5f, 0x00, 0x00 },  // 21 !
   { 0x00, 0x07, 0x00, 0x07, 0x00 },  // 22 "
