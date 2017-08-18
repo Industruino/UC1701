@@ -23,39 +23,34 @@
  */
 
 
+#define USE_UC1701_SPIMODE 1 // 1:Hardware SPI 0:software spi(shitout)
+#define USE_BITBAND        1 // ARM-M3 ビットバンド機能利用 1:利用 0:利用しない
+
 #include "UC1701.h"
-
-#if ARDUINO < 100
-#include <WProgram.h>
-#else
+#include <SPI.h>
 #include <Arduino.h>
-#endif
-
-#include <avr/pgmspace.h>
+#include <libmaple/bitband.h>
 
 
 /*
  * If this was a ".h", it would get added to sketches when using
  * the "Sketch -> Import Library..." menu on the Arduino IDE...
  */
+
 #include "charset.cpp"
 
-
-UC1701::UC1701(unsigned char sclk, unsigned char sid,
-                 unsigned char cs1,
-                 unsigned char a0):
+UC1701::UC1701(uint8_t sclk, uint8_t sid,
+                 uint8_t cs1,
+                 uint8_t a0):
     pin_sclk(sclk),
     pin_sid(sid),
     pin_cs1(cs1),
     pin_a0(a0)
 {}
 
-
-
-
 void UC1701::begin()
 {
-   this->width = 128;
+    this->width = 128;
     this->height = 64;
 
     this->column = 0;
@@ -63,14 +58,20 @@ void UC1701::begin()
     // All pins are outputs 
     pinMode(this->pin_cs1, OUTPUT);
     pinMode(this->pin_a0, OUTPUT);
+#if USE_UC1701_SPIMODE == 0    
     pinMode(this->pin_sclk, OUTPUT);
     pinMode(this->pin_sid, OUTPUT);
-
+#endif
     // Reset the controller state...
     digitalWrite(this->pin_cs1, LOW);
     digitalWrite(this->pin_a0, LOW);
     digitalWrite(this->pin_cs1, HIGH);
-
+#if  USE_UC1701_SPIMODE == 1
+	SPI.begin();
+	SPI.setBitOrder(MSBFIRST); 
+  SPI.setDataMode(SPI_MODE0);
+	SPI.setClockDivider(SPI_CLOCK_DIV2);
+#endif
     // Set the LCD parameters...
    this->Transfer_command(0xE2);  //System Reset
    this->Transfer_command(0x40); // Set display start line to 0 
@@ -110,54 +111,38 @@ for  (unsigned short j = 0; j < 8; j++)
     this->setCursor(0, 0);
 }
 
-void UC1701::setCursor(unsigned char column, unsigned char line)
-{
+void UC1701::setCursor(uint8_t column, uint8_t line) {
        int i, j;
        column = column+4;
        this->column = column;
        this->line = line;
 
-       i=(column&0xF0)>>4;
-       j=column&0x0F;
+       i = (column&0xF0)>>4;
+       j = column&0x0F;
        digitalWrite(this->pin_cs1, LOW);
-       this->Transfer_command(0xb0+line); 
+       this->Transfer_command(0xb0+line) ; 
        this->Transfer_command(0x10+i); 
        this->Transfer_command(j);
 }
 
-#if ARDUINO < 100
-void UC1701::write(uint8_t chr)
-#else
 size_t UC1701::write(uint8_t chr)
-#endif
 {
     // ASCII 7-bit only...
     if (chr >= 0x80) {
-#if ARDUINO < 100
-        return;
-#else
         return 0;
-#endif
     }
 
     if (chr == '\r') {
         this->setCursor(0, this->line);
-#if ARDUINO < 100
-        return;
-#else
         return 1;
-#endif
     } else if (chr == '\n') {
         this->setCursor(this->column, this->line + 1);
-#if ARDUINO < 100
-        return;
-#else
         return 1;
-#endif
+
     }
 
-    const unsigned char *glyph;
-    unsigned char pgm_buffer[5];
+    const uint8_t *glyph;
+    uint8_t pgm_buffer[5];
 
     if (chr >= ' ') {
         // Regular ASCII characters are kept in flash to save RAM...
@@ -175,7 +160,7 @@ size_t UC1701::write(uint8_t chr)
     }
 
     // Output one column at a time...
-    for (unsigned char i = 0; i < 5; i++) {
+    for (uint8_t i = 0; i < 5; i++) {
         this->Transfer_data(glyph[i]);
     }
 
@@ -189,12 +174,10 @@ size_t UC1701::write(uint8_t chr)
         this->line = (this->line + 1) % (this->height/9 + 1);
     }
 
-#if ARDUINO >= 100
     return 1;
-#endif
 }
 
-void UC1701::createChar(unsigned char chr, const unsigned char *glyph)
+void UC1701::createChar(uint8_t chr, const uint8_t *glyph)
 {
     // ASCII 0-31 only...
     if (chr >= ' ') {
@@ -208,7 +191,7 @@ void UC1701::clearLine()
 {
     this->setCursor(0, this->line);
 
-    for (unsigned char i = 4; i < 132; i++) {
+    for (uint8_t i = 4; i < 132; i++) {
         this->Transfer_data( 0x00);
     }
 
@@ -220,19 +203,20 @@ void UC1701::home()
     this->setCursor(0, this->line);
 }
 
-void UC1701::drawBitmap(const unsigned char *data, unsigned char columns, unsigned char lines)
+
+void UC1701::drawBitmap(const uint8_t *data, uint8_t columns, uint8_t lines)
 {
-    unsigned char scolumn = this->column;
-    unsigned char sline = this->line;
+    uint8_t scolumn = this->column;
+    uint8_t sline = this->line;
 
     // The bitmap will be clipped at the right/bottom edge of the display...
-    unsigned char mx = (scolumn + columns > this->width) ? (this->width - scolumn) : columns;
-    unsigned char my = (sline + lines > this->height/8) ? (this->height/8 - sline) : lines;
+    uint8_t mx = (scolumn + columns > this->width) ? (this->width - scolumn) : columns;
+    uint8_t my = (sline + lines > this->height/8) ? (this->height/8 - sline) : lines;
 
-    for (unsigned char y = 0; y < my; y++) {
+    for (uint8_t y = 0; y < my; y++) {
         this->setCursor(scolumn, sline + y);
 
-        for (unsigned char x = 0; x < mx; x++) {
+        for (uint8_t x = 0; x < mx; x++) {
             this->Transfer_data(data[y * columns + x]);
         }
     }
@@ -241,10 +225,10 @@ void UC1701::drawBitmap(const unsigned char *data, unsigned char columns, unsign
     this->setCursor(scolumn + columns, sline);
 }
 
-void UC1701::drawColumn(unsigned char lines, unsigned char value)
+void UC1701::drawColumn(uint8_t lines, uint8_t value)
 {
-    unsigned char scolumn = this->column;
-    unsigned char sline = this->line;
+    uint8_t scolumn = this->column;
+    uint8_t sline = this->line;
 
     // Keep "value" within range...
     if (value > lines*8) {
@@ -252,17 +236,17 @@ void UC1701::drawColumn(unsigned char lines, unsigned char value)
     }
 
     // Find the line where "value" resides...
-    unsigned char mark = (lines*8 - 1 - value)/8;
+    uint8_t mark = (lines*8 - 1 - value)/8;
     
     // Clear the lines above the mark...
-    for (unsigned char line = 0; line < mark; line++) {
+    for (uint8_t line = 0; line < mark; line++) {
         this->setCursor(scolumn, sline + line);
         this->Transfer_data( 0x00);
     }
 
     // Compute the byte to draw at the "mark" line...
-    unsigned char b = 0xff;
-    for (unsigned char i = 0; i < lines*8 - mark*8 - value; i++) {
+    uint8_t b = 0xff;
+    for (uint8_t i = 0; i < lines*8 - mark*8 - value; i++) {
         b <<= 1;
     }
 
@@ -270,7 +254,7 @@ void UC1701::drawColumn(unsigned char lines, unsigned char value)
     this->Transfer_data(b);
 
     // Fill the lines below the mark...
-    for (unsigned char line = mark + 1; line < lines; line++) {
+    for ( line = mark + 1; line < lines; line++) {
         this->setCursor(scolumn, sline + line);
         this->Transfer_data(0xff);
     }
@@ -281,35 +265,25 @@ void UC1701::drawColumn(unsigned char lines, unsigned char value)
 
 void UC1701::Transfer_command(int data1)
 {
-   char i;
    digitalWrite(this->pin_cs1, LOW);
    digitalWrite(this->pin_a0, LOW);
-   for (i=0; i<8; i++)
-               {
-                 digitalWrite(this->pin_sclk, LOW);
-                 if(data1&0x80) digitalWrite(this->pin_sid, HIGH);
-                 else digitalWrite(this->pin_sid, LOW);
-                 delayMicroseconds(2);
-                 digitalWrite(this->pin_sclk, HIGH);
-                 delayMicroseconds(2);
-                 data1=data1<<1;
-               }
+#if USE_UC1701_SPIMODE == 0
+   shiftOut(this->pin_sid, this->pin_sclk, MSBFIRST, data1);
+#else
+   SPI.transfer(data1); 
+#endif
+   digitalWrite(this->pin_cs1, HIGH);
 }
 
 void UC1701::Transfer_data(int data1)
 {
-   char i;
    digitalWrite(this->pin_cs1, LOW);
    digitalWrite(this->pin_a0, HIGH);
-   for (i=0; i<8; i++)
-               {
-                 digitalWrite(this->pin_sclk, LOW);
-                 if(data1&0x80) digitalWrite(this->pin_sid, HIGH);
-                 else digitalWrite(this->pin_sid, LOW);
-                 delayMicroseconds(2);
-                 digitalWrite(this->pin_sclk, HIGH);
-                 delayMicroseconds(2);
-                 data1=data1<<1;
-               }
+#if USE_UC1701_SPIMODE == 0
+   shiftOut(this->pin_sid, this->pin_sclk, MSBFIRST, data1);
+#else
+   SPI.transfer(data1); 
+#endif
+   digitalWrite(this->pin_cs1, HIGH);
 }
 
