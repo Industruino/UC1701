@@ -22,6 +22,8 @@
  * THE SOFTWARE.
  */
 
+#ifndef UC1701_H_
+#define UC1701_H_
 
 #if ARDUINO < 100
 #include <WProgram.h>
@@ -93,4 +95,4 @@ class UC1701: public Print {
 
 };
 
-
+#endif // UC1701_H_
